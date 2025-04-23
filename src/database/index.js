@@ -12,6 +12,14 @@ if (!fs.existsSync(dbDir)) {
   fs.mkdirSync(dbDir, { recursive: true });
 }
 
+// データベースファイルが存在するか確認
+const dbExists = fs.existsSync(dbPath);
+if (dbExists) {
+  console.log(`既存のデータベースファイルを使用します: ${dbPath}`);
+} else {
+  console.log(`新しいデータベースファイルを作成します: ${dbPath}`);
+}
+
 // データベース接続
 const db = new sqlite3.Database(dbPath, (err) => {
   if (err) {
@@ -116,7 +124,7 @@ const tasks = {
       stmt.finalize();
     });
   },
-  
+
   getAll: (userId) => {
     return new Promise((resolve, reject) => {
       db.all(
@@ -132,12 +140,12 @@ const tasks = {
       );
     });
   },
-  
+
   update: (taskId, updateData) => {
     return new Promise((resolve, reject) => {
       const fields = Object.keys(updateData).map(key => `${key} = ?`).join(', ');
       const values = Object.values(updateData);
-      
+
       db.run(
         `UPDATE tasks SET ${fields} WHERE id = ?`,
         [...values, taskId],
@@ -170,7 +178,7 @@ const projectIdeas = {
       stmt.finalize();
     });
   },
-  
+
   getAll: (userId) => {
     return new Promise((resolve, reject) => {
       db.all(
@@ -205,7 +213,7 @@ const journal = {
       stmt.finalize();
     });
   },
-  
+
   getRecent: (userId, limit = 10) => {
     return new Promise((resolve, reject) => {
       db.all(

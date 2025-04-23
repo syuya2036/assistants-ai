@@ -1,11 +1,10 @@
-const { Client, Events, GatewayIntentBits, MessageActionRow, MessageButton } = require('discord.js');
+const { Client, Events, GatewayIntentBits } = require('discord.js');
 const { CronJob } = require('cron');
+const nodeFetch = require('node-fetch');
 require('dotenv').config();
 
 const database = require('./database');
-const localLLM = require('./services/localLLM');
-const geminiService = require('./services/geminiService');
-const assistantAgent = require('./agents/assistantAgent');
+const aiService = require('./services/aiService');  // 新しい統合AIサービス
 const { formatDate, extractDates, extractUniqueUserIds } = require('./utils/helpers');
 
 // Discordクライアントの初期化
@@ -41,7 +40,7 @@ client.on(Events.MessageCreate, async message => {
     console.error('メッセージの保存中にエラーが発生しました:', error);
   }
 
-  // @ai メンションの処理（Gemini API呼び出し）
+  // @ai メンションの処理
   if (message.content.toLowerCase().includes('@ai')) {
     // typing表示
     message.channel.sendTyping();
@@ -49,14 +48,17 @@ client.on(Events.MessageCreate, async message => {
     try {
       const prompt = message.content.replace(/@ai/gi, '').trim();
       
-      // Gemini APIを使用して応答を生成
-      const response = await geminiService.generateGeminiResponse(
-        `あなたは秘書AIです。以下の質問に日本語で答えてください：${prompt}`
-      );
+      // システムプロンプトの設定
+      const systemPrompt = `
+あなたは優秀な秘書AIです。ユーザーからの質問や指示に対して、丁寧かつ簡潔に日本語で回答してください。
+可能な限り具体的な情報を提供し、必要に応じて選択肢を示したり、次のステップを提案したりしてください。
+`;
       
+      // aiServiceを使用して応答を取得（直接fetchを使用しない）
+      const response = await aiService.respondToMessage(prompt);
       await message.reply(response);
     } catch (error) {
-      console.error('Gemini API呼び出しエラー:', error);
+      console.error('AI応答エラー:', error);
       await message.reply('すみません、エラーが発生しました。後でもう一度お試しください。');
     }
     
@@ -67,7 +69,7 @@ client.on(Events.MessageCreate, async message => {
   if (message.content.toLowerCase().includes('タスク') || 
       message.content.toLowerCase().includes('todo')) {
     try {
-      const result = await geminiService.extractTasks(message.content);
+      const result = await aiService.extractTasks(message.content);
       
       if (result.tasks && result.tasks.length > 0) {
         // 抽出したタスクをデータベースに保存
@@ -99,7 +101,7 @@ client.on(Events.MessageCreate, async message => {
   if (message.content.toLowerCase().includes('ジャーナル') ||
       message.content.toLowerCase().includes('日記')) {
     try {
-      const result = await geminiService.assistWithJournaling(message.content);
+      const result = await aiService.assistWithJournaling(message.content);
       
       if (result.journalEntry) {
         const entry = result.journalEntry;
@@ -121,7 +123,7 @@ client.on(Events.MessageCreate, async message => {
     }
   }
   
-  // 通常のメッセージ処理（ローカルLLM）
+  // 通常のメッセージ処理
   try {
     // 過去のメッセージを取得してコンテキストとして使用
     const recentMessages = await database.getRecentMessages(message.author.id, 5);
@@ -129,8 +131,8 @@ client.on(Events.MessageCreate, async message => {
     // typing表示
     message.channel.sendTyping();
     
-    // ローカルLLMで応答を生成
-    const response = await localLLM.respondToMessage(message.content, recentMessages);
+    // AIで応答を生成
+    const response = await aiService.respondToMessage(message.content, recentMessages);
     
     // 応答が長すぎる場合は分割して送信
     if (response.length > 2000) {
@@ -142,7 +144,7 @@ client.on(Events.MessageCreate, async message => {
       await message.reply(response);
     }
   } catch (error) {
-    console.error('ローカルLLM応答エラー:', error);
+    console.error('AI応答エラー:', error);
     // エラーが発生した場合はユーザーに通知しない（静かに失敗）
   }
 });
@@ -151,9 +153,9 @@ client.on(Events.MessageCreate, async message => {
 function splitMessage(message, maxLength = 2000) {
   const chunks = [];
   let currentChunk = '';
-  
+
   const paragraphs = message.split('\n\n');
-  
+
   for (const paragraph of paragraphs) {
     if (currentChunk.length + paragraph.length + 2 <= maxLength) {
       currentChunk += (currentChunk ? '\n\n' : '') + paragraph;
@@ -167,7 +169,7 @@ function splitMessage(message, maxLength = 2000) {
         // 段落が長すぎる場合、さらに分割
         const sentences = paragraph.split('. ');
         let tempChunk = '';
-        
+
         for (const sentence of sentences) {
           if (tempChunk.length + sentence.length + 2 <= maxLength) {
             tempChunk += (tempChunk ? '. ' : '') + sentence;
@@ -178,49 +180,47 @@ function splitMessage(message, maxLength = 2000) {
             tempChunk = sentence;
           }
         }
-        
+
         if (tempChunk) {
           currentChunk = tempChunk;
         }
       }
     }
   }
-  
+
   if (currentChunk) {
     chunks.push(currentChunk);
   }
-  
+
   return chunks;
 }
 
-// 日次ジョブの設定（Geminiが一日一回走る）
+// 日次ジョブの設定
 function setupDailyJob() {
   const cronTime = process.env.DAILY_CRON_TIME || '0 9 * * *'; // デフォルトは毎朝9時
   
   const job = new CronJob(cronTime, async function() {
-    console.log(`日次サマリージョブを実行中... ${formatDate()}`);
+    console.log('日次サマリージョブを実行中...');
     
     try {
-      // データベースから全てのユニークなユーザーIDを取得
-      const messageHistory = await database.db.all('SELECT DISTINCT user_id FROM message_history');
-      const userIds = messageHistory.map(record => record.user_id);
+      // 全ユーザーからユニークなユーザーIDを取得
+      const users = []; // 例: [{id: 'user1'}, {id: 'user2'}]
       
-      for (const userId of userIds) {
+      for (const user of users) {
+        const userId = user.id;
+        
         // 最近のメッセージと現在のタスクを取得
         const messageHistory = await database.getRecentMessages(userId, 50);
         const tasks = await database.tasks.getAll(userId);
         
-        // 日次サマリーを生成
-        const summary = await geminiService.generateDailySummary(messageHistory, tasks);
+        // AIサービスを使用して日次サマリーを生成
+        const summary = await aiService.generateDailySummary(messageHistory, tasks);
         
         // ユーザーにDMを送信（または指定されたチャンネルに投稿）
-        try {
-          const userObj = await client.users.fetch(userId);
-          await userObj.send(`📅 **${formatDate()} の日次サマリー** 📅\n\n${summary}`);
-          console.log(`ユーザー ${userId} の日次サマリーを送信しました`);
-        } catch (error) {
-          console.error(`ユーザー ${userId} へのDM送信エラー:`, error);
-        }
+        const userObj = await client.users.fetch(userId);
+        await userObj.send(`📅 **今日の日次サマリー** 📅\n\n${summary}`);
+        
+        console.log(`ユーザー ${userId} の日次サマリーを送信しました`);
       }
     } catch (error) {
       console.error('日次サマリージョブ実行中にエラーが発生しました:', error);

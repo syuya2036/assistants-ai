@@ -25,7 +25,7 @@ async function createAssistantAgent(userId) {
         }
       }
     }),
-    
+
     new DynamicTool({
       name: "add_task",
       description: "新しいタスクをユーザーのタスクリストに追加します",
@@ -39,7 +39,7 @@ async function createAssistantAgent(userId) {
         }
       }
     }),
-    
+
     new DynamicTool({
       name: "update_task",
       description: "既存のタスクを更新します",
@@ -53,7 +53,7 @@ async function createAssistantAgent(userId) {
         }
       }
     }),
-    
+
     new DynamicTool({
       name: "get_project_ideas",
       description: "ユーザーのプロジェクトアイデア一覧を取得します",
@@ -66,7 +66,7 @@ async function createAssistantAgent(userId) {
         }
       }
     }),
-    
+
     new DynamicTool({
       name: "add_project_idea",
       description: "新しいプロジェクトアイデアを追加します",
@@ -80,7 +80,7 @@ async function createAssistantAgent(userId) {
         }
       }
     }),
-    
+
     new DynamicTool({
       name: "get_journal_entries",
       description: "ユーザーの最近のジャーナルエントリを取得します",
@@ -93,7 +93,7 @@ async function createAssistantAgent(userId) {
         }
       }
     }),
-    
+
     new DynamicTool({
       name: "add_journal_entry",
       description: "新しいジャーナルエントリを追加します",
@@ -108,7 +108,7 @@ async function createAssistantAgent(userId) {
       }
     })
   ];
-  
+
   // AI関連ツールの作成
   const aiTools = [
     new DynamicTool({
@@ -134,7 +134,7 @@ async function createAssistantAgent(userId) {
         }
       }
     }),
-    
+
     new DynamicTool({
       name: "generate_project_ideas",
       description: "ユーザーの過去のメッセージに基づいてプロジェクトのアイデアを生成します",
@@ -143,7 +143,7 @@ async function createAssistantAgent(userId) {
           // 最近のメッセージ履歴を取得
           const messageHistory = await database.getRecentMessages(userId, 50);
           const ideas = await geminiService.generateProjectIdeas(messageHistory);
-          
+
           // 生成したアイデアをデータベースに保存
           if (ideas.projectIdeas && Array.isArray(ideas.projectIdeas)) {
             for (const idea of ideas.projectIdeas) {
@@ -155,21 +155,21 @@ async function createAssistantAgent(userId) {
               );
             }
           }
-          
+
           return JSON.stringify(ideas);
         } catch (error) {
           return `エラー: ${error.message}`;
         }
       }
     }),
-    
+
     new DynamicTool({
       name: "assist_with_journaling",
       description: "ユーザーのジャーナリングを支援します",
       func: async (input) => {
         try {
           const result = await geminiService.assistWithJournaling(input);
-          
+
           // ジャーナルエントリをデータベースに保存
           if (result.journalEntry) {
             const entry = result.journalEntry;
@@ -180,14 +180,14 @@ async function createAssistantAgent(userId) {
               entry.tags
             );
           }
-          
+
           return JSON.stringify(result);
         } catch (error) {
           return `エラー: ${error.message}`;
         }
       }
     }),
-    
+
     new DynamicTool({
       name: "generate_daily_summary",
       description: "ユーザーの活動の日次サマリーを生成します",
@@ -196,7 +196,7 @@ async function createAssistantAgent(userId) {
           // 最近のメッセージと現在のタスクを取得
           const messageHistory = await database.getRecentMessages(userId, 50);
           const tasks = await database.tasks.getAll(userId);
-          
+
           const summary = await geminiService.generateDailySummary(messageHistory, tasks);
           return summary;
         } catch (error) {
@@ -205,10 +205,10 @@ async function createAssistantAgent(userId) {
       }
     })
   ];
-  
+
   // すべてのツールを集約
   const tools = [...databaseTools, ...aiTools];
-  
+
   // OpenAI APIのオブジェクトを作成（代わりにローカルLLMを使用）
   const llmModel = new ChatOpenAI({
     temperature: 0.7,
@@ -216,7 +216,7 @@ async function createAssistantAgent(userId) {
     // ここではローカルLLMを使用するための設定を行う必要があります
     // 例: APIコールをカスタマイズするなど
   });
-  
+
   // プロンプトとツールを使ってエージェントを初期化
   const agent = await initializeAgentExecutorWithOptions(
     tools,
@@ -227,7 +227,7 @@ async function createAssistantAgent(userId) {
       maxIterations: 5,
     }
   );
-  
+
   return agent;
 }
 
@@ -241,12 +241,12 @@ async function getAgentResponse(userId, userInput) {
   try {
     // エージェントの作成
     const agent = await createAssistantAgent(userId);
-    
+
     // エージェントに問い合わせ
     const result = await agent.call({
       input: userInput
     });
-    
+
     return result.output;
   } catch (error) {
     console.error('エージェント実行エラー:', error);

@@ -93,7 +93,7 @@ ${message}
     if (!jsonMatch) {
       return { tasks: [] };
     }
-    
+
     return JSON.parse(jsonMatch[0]);
   } catch (error) {
     console.error('タスク抽出中にエラーが発生しました:', error);
@@ -111,7 +111,7 @@ async function generateProjectIdeas(messageHistory) {
   let context = messageHistory
     .map(msg => msg.message_content)
     .join('\n\n');
-  
+
   const prompt = `
 あなたは創造的な秘書AIです。ユーザーの過去のメッセージに基づいて、ユーザーが興味を持ちそうな新しいプロジェクトのアイデアを3つ提案してください。
 各アイデアには、タイトル、詳細な説明、カテゴリを含めてください。
@@ -138,7 +138,7 @@ ${context}
     if (!jsonMatch) {
       return { projectIdeas: [] };
     }
-    
+
     return JSON.parse(jsonMatch[0]);
   } catch (error) {
     console.error('プロジェクトアイデア生成中にエラーが発生しました:', error);
@@ -178,7 +178,7 @@ ${message}
     if (!jsonMatch) {
       return { journalEntry: { content: message, mood: "不明", tags: "" } };
     }
-    
+
     return JSON.parse(jsonMatch[0]);
   } catch (error) {
     console.error('ジャーナリング支援中にエラーが発生しました:', error);
@@ -197,7 +197,7 @@ async function generateDailySummary(messageHistory, tasks) {
   let context = messageHistory
     .map(msg => msg.message_content)
     .join('\n\n');
-  
+
   // タスクの情報を文字列化
   let taskContext = '';
   if (tasks && tasks.length > 0) {
@@ -205,7 +205,7 @@ async function generateDailySummary(messageHistory, tasks) {
       .map(task => `- ${task.title}${task.due_date ? `（期限: ${task.due_date}）` : ''}${task.status ? `（状態: ${task.status}）` : ''}`)
       .join('\n');
   }
-  
+
   const prompt = `
 あなたは高度な秘書AIです。ユーザーの最近のメッセージや現在のタスクに基づいて、以下を含む日次サマリーを作成してください：
 1. 主なトピックやテーマの概要
@@ -226,7 +226,7 @@ ${taskContext}
       temperature: 0.8,
       maxOutputTokens: 3000
     });
-    
+
     return response.trim();
   } catch (error) {
     console.error('日次サマリー生成中にエラーが発生しました:', error);
